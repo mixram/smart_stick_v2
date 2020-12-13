@@ -213,6 +213,7 @@ void loop()
         {
             Keyboard.releaseAll();
             Mouse.release(MOUSE_LEFT);
+            Mouse.release(MOUSE_MIDDLE_KEY);
             Keyboard.write(ESC_KEY);
 
             /*
@@ -242,8 +243,6 @@ void loop()
 
             wasMoved = false;
         }
-
-        //TODO: может быть это должно быть расположено в рамках самых внешних скобочек?
 
         // save current switch mode buttons states to use on the next loop
         lastInclineSwitchState = switchInclineSwitchState;
