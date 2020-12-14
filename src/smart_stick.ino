@@ -7,8 +7,8 @@
 #define JOYSTICK_MODE_SWITCH_I 3 // button to switch between modes
 #define ZOOM_IN_I 4              // button to zoom in
 #define ZOOM_OUT_I 5             // button to zoom out
-#define HOME_I 6                 // button to 'go home'
-#define RESERVE_I 6              // button for reserve function
+#define CENTER_I 6               // button for 'center' function
+#define HOME_I 7                 // button to 'go home'
 #define X_AXIS_I A0              // joystick X axis
 #define Y_AXIS_I A1              // joystick Y axis
 
@@ -35,16 +35,18 @@
 #define F3_KEY KEY_F3                 // zoom view
 #define F4_KEY KEY_F4                 // rotate view
 #define F6_KEY KEY_F6                 // home view
+#define HOME_KEY KEY_HOME             // fit zoom
 
 bool lastSwitchOnOffState = LOW;        // previous ON\OFF switch state
 bool lastJoystickModeSwitchState = LOW; // previous joystick mode switch state
 bool lastZoomInState = LOW;             // previous zoom in state
 bool lastZoomOutState = LOW;            // previous zoom out state
+bool lastToCenterState = LOW;           // previous 'to center' state
 bool lastGoHomeState = LOW;             // previous 'go home' state
-bool lastReserveState = LOW;            // previous reserve state
 bool deviceIsActive = false;            // whether or not to control the HID
-bool wasMoved = false;
-bool rotateModeActive = true; // joystick mode (true - rotate, false - move)
+bool wasMoved = false;                  //indicates movement state
+bool rotateModeActive = true;           // joystick mode (true - rotate, false - move)
+bool placeMouseToCenter = true;         //place or not mouse to the center of the screen
 
 /*
   reads an axis (0 or 1 for x or y) and scales the analog input RANGE to a RANGE from 0 to <RANGE>
@@ -133,15 +135,15 @@ void setup()
     pinMode(JOYSTICK_MODE_SWITCH_I, INPUT_PULLUP); // joystick switch mode pin
     pinMode(ZOOM_IN_I, INPUT);                     // zoome in switch pin
     pinMode(ZOOM_OUT_I, INPUT);                    // zoome out switch pin
+    pinMode(CENTER_I, INPUT);                      // 'to center' switch pin
     pinMode(HOME_I, INPUT);                        // 'go home' switch pin
-    pinMode(RESERVE_I, INPUT);                     // reserve switch pin
 
     digitalWrite(SWITCH_ON_OFF_I, HIGH);        // pull high button on\off
     digitalWrite(JOYSTICK_MODE_SWITCH_I, HIGH); // pull high button joystick mode
     digitalWrite(ZOOM_IN_I, HIGH);              // pull high button zoome in
     digitalWrite(ZOOM_OUT_I, HIGH);             // pull high button zoome out
+    digitalWrite(CENTER_I, HIGH);               // pull high button center
     digitalWrite(HOME_I, HIGH);                 // pull high button home
-    digitalWrite(RESERVE_I, HIGH);              // pull high button reserve
 
     delay(1000); // short delay to let outputs settle
 
@@ -159,12 +161,11 @@ void loop()
 {
     // debounced value of ON\OFF button (pressed or released)
     bool switchOnOffState = debounce(lastSwitchOnOffState, SWITCH_ON_OFF_I);
-
     // device ON\OFF state
     if (switchOnOffState != lastSwitchOnOffState && switchOnOffState == LOW)
     {
         deviceIsActive = !deviceIsActive;
-        toConsoleDeviceState(deviceIsActive);
+        // toConsoleDeviceState(deviceIsActive);
     }
 
     // if the HID control state is active, do actions
@@ -176,14 +177,16 @@ void loop()
         if (switchJoystickModeSwitchState != lastJoystickModeSwitchState && switchJoystickModeSwitchState == LOW)
         {
             rotateModeActive = !rotateModeActive;
-            toConsoleJoystickModeState(rotateModeActive);
+            // toConsoleJoystickModeState(rotateModeActive);
         }
 
         int xReading = readAxis(X_AXIS_I, RANGE, CENTER, THRESHOLD);
         int yReading = readAxis(Y_AXIS_I, RANGE, CENTER, THRESHOLD);
         bool zoomInState = debounce(lastZoomInState, ZOOM_IN_I);
         bool zoomOutState = debounce(lastZoomOutState, ZOOM_OUT_I);
-        
+        bool toCenterState = debounce(lastToCenterState, CENTER_I);
+        bool goHomeState = debounce(lastGoHomeState, HOME_I);
+
         int zoomReading = 0;
         if (zoomInState)
         {
@@ -196,7 +199,7 @@ void loop()
 
         if (xReading != 0 || yReading != 0)
         {
-            toConsoleJoystickData(xReading, yReading);
+            // toConsoleJoystickData(xReading, yReading);
 
             if (rotateModeActive)
             {
@@ -214,13 +217,21 @@ void loop()
         }
         else if (zoomReading != 0)
         {
-            toConsoleJoystickData(zoomReading);
+            // toConsoleJoystickData(zoomReading);
 
             Keyboard.press(F3_KEY);
             Mouse.press(MOUSE_LEFT);
             Mouse.move(0, zoomReading, 0);
 
             wasMoved = true;
+        }
+        else if (toCenterState != lastToCenterState && toCenterState == LOW)
+        {
+            Keyboard.write(F6_KEY);
+        }
+        else if (goHomeState != lastGoHomeState && goHomeState == LOW)
+        {
+            Keyboard.write(HOME_KEY);
         }
         else if (wasMoved)
         {
@@ -229,29 +240,32 @@ void loop()
             Mouse.release(MOUSE_MIDDLE_KEY);
             Keyboard.write(ESC_KEY);
 
-            /*
-            * returm mouse to the ~center of the screen
-            * step range: -128 to 127
-            */
-            //move mouse left to the end of the screen
-            for (int a = 0; a < LEFT_STEPS_ITERATION_QTY; a++)
+            if (placeMouseToCenter)
             {
-                Mouse.move(-128, 0, 0);
-            }
-            //move mouse up to the left upper corner of the screen
-            for (int a = 0; a < UP_STEPS_ITERATION_QTY; a++)
-            {
-                Mouse.move(0, -128, 0);
-            }
-            //move mouse right to the upper ~center of the screen
-            for (int a = 0; a < RIGHT_STEPS_ITERATION_QTY; a++)
-            {
-                Mouse.move(127, 0, 0);
-            }
-            //move mouse down to the ~center of the screen
-            for (int a = 0; a < DOWN_STEPS_ITERATION_QTY; a++)
-            {
-                Mouse.move(0, 127, 0);
+                /*
+                * returm mouse to the ~center of the screen
+                * step range: -128 to 127
+                */
+                //move mouse left to the end of the screen
+                for (int a = 0; a < LEFT_STEPS_ITERATION_QTY; a++)
+                {
+                    Mouse.move(-128, 0, 0);
+                }
+                //move mouse up to the left upper corner of the screen
+                for (int a = 0; a < UP_STEPS_ITERATION_QTY; a++)
+                {
+                    Mouse.move(0, -128, 0);
+                }
+                //move mouse right to the upper ~center of the screen
+                for (int a = 0; a < RIGHT_STEPS_ITERATION_QTY; a++)
+                {
+                    Mouse.move(127, 0, 0);
+                }
+                //move mouse down to the ~center of the screen
+                for (int a = 0; a < DOWN_STEPS_ITERATION_QTY; a++)
+                {
+                    Mouse.move(0, 127, 0);
+                }
             }
 
             wasMoved = false;
@@ -261,6 +275,8 @@ void loop()
         lastJoystickModeSwitchState = switchJoystickModeSwitchState;
         lastZoomInState = zoomInState;
         lastZoomOutState = zoomOutState;
+        lastToCenterState = toCenterState;
+        lastGoHomeState = goHomeState;
 
         delay(RESPONSE_DELAY);
     }
