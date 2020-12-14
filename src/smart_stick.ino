@@ -157,8 +157,6 @@ void setup()
 
 void loop()
 {
-    unsigned long currentMillis = millis();
-
     // debounced value of ON\OFF button (pressed or released)
     bool switchOnOffState = debounce(lastSwitchOnOffState, SWITCH_ON_OFF_I);
 
@@ -183,66 +181,49 @@ void loop()
 
         int xReading = readAxis(X_AXIS_I, RANGE, CENTER, THRESHOLD);
         int yReading = readAxis(Y_AXIS_I, RANGE, CENTER, THRESHOLD);
+        bool zoomInState = debounce(lastZoomInState, ZOOM_IN_I);
+        bool zoomOutState = debounce(lastZoomOutState, ZOOM_OUT_I);
+        
+        int zoomReading = 0;
+        if (zoomInState)
+        {
+            zoomReading = STEP_MOVE;
+        }
+        else if (zoomOutState)
+        {
+            zoomReading = -STEP_MOVE;
+        }
+
         if (xReading != 0 || yReading != 0)
         {
             toConsoleJoystickData(xReading, yReading);
 
-            // if (rotateModeActive)
-            // {
-            //     Keyboard.press(F4_KEY);
-            //     Mouse.press(MOUSE_LEFT);
-            //     Mouse.move(xReading, yReading, 0);
-            // }
-            // else
-            // {
-            //     Mouse.press(MOUSE_MIDDLE_KEY);
-            //     Mouse.move(xReading, yReading, 0);
-            // }
-
-            Serial.print("Joystick time: ");
-            Serial.print(currentMillis);
-            Serial.println(".");
-
-            Keyboard.press(F4_KEY);
-            Mouse.press(MOUSE_LEFT);
-            Mouse.move(xReading, yReading, 0);
-
-            // delay(RESPONSE_DELAY);
-
-            // Keyboard.releaseAll();
-            // Mouse.release(MOUSE_LEFT);
+            if (rotateModeActive)
+            {
+                Keyboard.press(F4_KEY);
+                Mouse.press(MOUSE_LEFT);
+                Mouse.move(xReading, yReading, 0);
+            }
+            else
+            {
+                Mouse.press(MOUSE_MIDDLE_KEY);
+                Mouse.move(xReading, yReading, 0);
+            }
 
             wasMoved = true;
         }
-
-        // int zoomReading = 0;
-        // bool zoomInState = debounce(lastZoomInState, ZOOM_IN_I);
-        // bool zoomOutState = debounce(lastZoomOutState, ZOOM_OUT_I);
-        // if (zoomInState)
-        // {
-        //     zoomReading = STEP_MOVE;
-        // }
-        // else if (zoomOutState)
-        // {
-        //     zoomReading = -STEP_MOVE;
-        // }
-        // if (zoomReading != 0)
-        // {
-        //     toConsoleJoystickData(zoomReading);
-
-        //     Keyboard.press(F3_KEY);
-        //     Mouse.press(MOUSE_LEFT);
-        //     Mouse.move(0, zoomReading, 0);
-
-        //     wasMoved = true;
-        // }
-
-        if (wasMoved)
+        else if (zoomReading != 0)
         {
-            Serial.print("wasMoved time: ");
-            Serial.print(currentMillis);
-            Serial.println(".");
+            toConsoleJoystickData(zoomReading);
 
+            Keyboard.press(F3_KEY);
+            Mouse.press(MOUSE_LEFT);
+            Mouse.move(0, zoomReading, 0);
+
+            wasMoved = true;
+        }
+        else if (wasMoved)
+        {
             Keyboard.releaseAll();
             Mouse.release(MOUSE_LEFT);
             Mouse.release(MOUSE_MIDDLE_KEY);
@@ -253,33 +234,33 @@ void loop()
             * step range: -128 to 127
             */
             //move mouse left to the end of the screen
-            // for (int a = 0; a < LEFT_STEPS_ITERATION_QTY; a++)
-            // {
-            //     Mouse.move(-128, 0, 0);
-            // }
+            for (int a = 0; a < LEFT_STEPS_ITERATION_QTY; a++)
+            {
+                Mouse.move(-128, 0, 0);
+            }
             //move mouse up to the left upper corner of the screen
-            // for (int a = 0; a < UP_STEPS_ITERATION_QTY; a++)
-            // {
-            //     Mouse.move(0, -128, 0);
-            // }
+            for (int a = 0; a < UP_STEPS_ITERATION_QTY; a++)
+            {
+                Mouse.move(0, -128, 0);
+            }
             //move mouse right to the upper ~center of the screen
-            // for (int a = 0; a < RIGHT_STEPS_ITERATION_QTY; a++)
-            // {
-            //     Mouse.move(127, 0, 0);
-            // }
+            for (int a = 0; a < RIGHT_STEPS_ITERATION_QTY; a++)
+            {
+                Mouse.move(127, 0, 0);
+            }
             //move mouse down to the ~center of the screen
-            // for (int a = 0; a < DOWN_STEPS_ITERATION_QTY; a++)
-            // {
-            //     Mouse.move(0, 127, 0);
-            // }
+            for (int a = 0; a < DOWN_STEPS_ITERATION_QTY; a++)
+            {
+                Mouse.move(0, 127, 0);
+            }
 
             wasMoved = false;
         }
 
         // save current switch mode buttons states to use on the next loop
         lastJoystickModeSwitchState = switchJoystickModeSwitchState;
-        // lastZoomInState = zoomInState;
-        // lastZoomOutState = zoomOutState;
+        lastZoomInState = zoomInState;
+        lastZoomOutState = zoomOutState;
 
         delay(RESPONSE_DELAY);
     }
