@@ -3,18 +3,21 @@
 #include <Keyboard.h>
 
 /*INPUT*/
-#define SWITCH_ON_OFF_I 2  // button switch to turn on and off mouse control
-#define INCLINE_SWITCH_I 3 // button switch to set inclint mode active
-#define MOVE_SWITCH_I 4    // button switch to set move mode active
-#define ZOOM_SWITCH_I 5    // button switch to set zoom mode active
-#define X_AXIS_I A0        // joystick X axis
-#define Y_AXIS_I A1        // joystick Y axis
+#define SWITCH_ON_OFF_I 2        // button to turn on and off device control
+#define JOYSTICK_MODE_SWITCH_I 3 // button to switch between modes
+#define ZOOM_IN_I 4              // button to zoom in
+#define ZOOM_OUT_I 5             // button to zoom out
+#define HOME_I 6                 // button to 'go home'
+#define RESERVE_I 6              // button for reserve function
+#define X_AXIS_I A0              // joystick X axis
+#define Y_AXIS_I A1              // joystick Y axis
 
 /*PARAMS*/
 #define RANGE 8                     // output RANGE of X or Y
 #define THRESHOLD RANGE / 4         // resting THRESHOLD
 #define CENTER RANGE / 2            // resting position value
 #define RESPONSE_DELAY 5            // response delay of the mouse, in ms
+#define STEP_MOVE 4                 // step amount for X or Y movement
 #define SENSITIVITY 2               // higher sensitivity value = slower mouse
 #define LEFT_STEPS_ITERATION_QTY 11 // iterations quantity to reach left end of the screen
 #define UP_STEPS_ITERATION_QTY 7    // iterations quantity to reach left upper corner of the screen
@@ -27,21 +30,21 @@
 #define MOUSE_MIDDLE_KEY MOUSE_MIDDLE // MOUSE_MIDDLE key
 
 /*KEYS*/
-#define PAGE_DOWN_KEY KEY_PAGE_DOWN   // KEY_PAGE_DOWN key
-#define PAGE_UP_KEY KEY_PAGE_UP       // KEY_PAGE_UP key
-#define ESC_KEY KEY_ESC               // ESC key
 #define LEFT_SHIFT_KEY KEY_LEFT_SHIFT // KEY_LEFT_SHIFT key
+#define ESC_KEY KEY_ESC               // ESC key
 #define F3_KEY KEY_F3                 // zoom view
 #define F4_KEY KEY_F4                 // rotate view
 #define F6_KEY KEY_F6                 // home view
 
-bool deviceIsActive = false;       // whether or not to control the HID
-bool lastSwitchOnOffState = LOW;   // previous ON\OFF switch state
-bool lastInclineSwitchState = LOW; // previous incline switch state
-bool lastMoveSwitchState = LOW;    // previous move switch state
-bool lastZoomSwitchState = LOW;    // previous zoom switch state
+bool lastSwitchOnOffState = LOW;        // previous ON\OFF switch state
+bool lastJoystickModeSwitchState = LOW; // previous joystick mode switch state
+bool lastZoomInState = LOW;             // previous zoom in state
+bool lastZoomOutState = LOW;            // previous zoom out state
+bool lastGoHomeState = LOW;             // previous 'go home' state
+bool lastReserveState = LOW;            // previous reserve state
+bool deviceIsActive = false;            // whether or not to control the HID
 bool wasMoved = false;
-int switchMode = 1; // joystick mode (default == 1 (incline))
+bool rotateModeActive = true; // joystick mode (true - rotate, false - move)
 
 /*
   reads an axis (0 or 1 for x or y) and scales the analog input RANGE to a RANGE from 0 to <RANGE>
@@ -89,10 +92,32 @@ void toConsoleDeviceState(bool deviceIsActive)
     Serial.println(".");
 }
 
-void toConsoleJoystickModeState(int modeNum)
+void toConsoleJoystickModeState(bool mode)
 {
-    Serial.print("Mode is active: ");
-    Serial.print(modeNum);
+    if (mode)
+    {
+        Serial.println("Rotate mode is active.");
+    }
+    else
+    {
+        Serial.println("Move mode is active.");
+    }
+}
+
+void toConsoleJoystickData(int xReading,
+                           int yReading)
+{
+    Serial.print("Joystick data: x=");
+    Serial.print(xReading);
+    Serial.print(", y=");
+    Serial.print(yReading);
+    Serial.println(".");
+}
+
+void toConsoleJoystickData(int yReading)
+{
+    Serial.print("Zoom steps: y=");
+    Serial.print(yReading);
     Serial.println(".");
 }
 
@@ -104,15 +129,19 @@ void setup()
 
     Serial.println("Initializing...");
 
-    pinMode(SWITCH_ON_OFF_I, INPUT);  // the ON\OFF switch pin
-    pinMode(INCLINE_SWITCH_I, INPUT); // the inclint switch pin
-    pinMode(MOVE_SWITCH_I, INPUT);    // the move switch pin
-    pinMode(ZOOM_SWITCH_I, INPUT);    // the zoom switch pin
+    pinMode(SWITCH_ON_OFF_I, INPUT);               // ON\OFF switch pin
+    pinMode(JOYSTICK_MODE_SWITCH_I, INPUT_PULLUP); // joystick switch mode pin
+    pinMode(ZOOM_IN_I, INPUT);                     // zoome in switch pin
+    pinMode(ZOOM_OUT_I, INPUT);                    // zoome out switch pin
+    pinMode(HOME_I, INPUT);                        // 'go home' switch pin
+    pinMode(RESERVE_I, INPUT);                     // reserve switch pin
 
-    digitalWrite(SWITCH_ON_OFF_I, HIGH);  // pull button select pin high
-    digitalWrite(INCLINE_SWITCH_I, HIGH); // pull button incline switch high
-    digitalWrite(MOVE_SWITCH_I, HIGH);    // pull button move switch high
-    digitalWrite(ZOOM_SWITCH_I, HIGH);    // pull button zoom switch high
+    digitalWrite(SWITCH_ON_OFF_I, HIGH);        // pull high button on\off
+    digitalWrite(JOYSTICK_MODE_SWITCH_I, HIGH); // pull high button joystick mode
+    digitalWrite(ZOOM_IN_I, HIGH);              // pull high button zoome in
+    digitalWrite(ZOOM_OUT_I, HIGH);             // pull high button zoome out
+    digitalWrite(HOME_I, HIGH);                 // pull high button home
+    digitalWrite(RESERVE_I, HIGH);              // pull high button reserve
 
     delay(1000); // short delay to let outputs settle
 
@@ -128,6 +157,8 @@ void setup()
 
 void loop()
 {
+    unsigned long currentMillis = millis();
+
     // debounced value of ON\OFF button (pressed or released)
     bool switchOnOffState = debounce(lastSwitchOnOffState, SWITCH_ON_OFF_I);
 
@@ -141,76 +172,77 @@ void loop()
     // if the HID control state is active, do actions
     if (deviceIsActive)
     {
-        // debounced value of incline mode button (pressed or released)
-        bool switchInclineSwitchState = debounce(lastInclineSwitchState, INCLINE_SWITCH_I);
-        // incline mode state
-        if (switchInclineSwitchState != lastInclineSwitchState && switchInclineSwitchState == LOW)
+        // debounced value of rotate mode button (pressed or released)
+        bool switchJoystickModeSwitchState = debounce(lastJoystickModeSwitchState, JOYSTICK_MODE_SWITCH_I);
+        // rotate mode state
+        if (switchJoystickModeSwitchState != lastJoystickModeSwitchState && switchJoystickModeSwitchState == LOW)
         {
-            switchMode = 1;
-            toConsoleJoystickModeState(switchMode);
-        }
-
-        // debounced value of move mode button (pressed or released)
-        bool switchMoveSwitchState = debounce(lastMoveSwitchState, MOVE_SWITCH_I);
-        // move mode state
-        if (switchMoveSwitchState != lastMoveSwitchState && switchMoveSwitchState == LOW)
-        {
-            switchMode = 2;
-            toConsoleJoystickModeState(switchMode);
-        }
-
-        // debounced value of zoom mode button (pressed or released)
-        bool switchZoomSwitchState = debounce(lastZoomSwitchState, ZOOM_SWITCH_I);
-        // zoom mode state
-        if (switchZoomSwitchState != lastZoomSwitchState && switchZoomSwitchState == LOW)
-        {
-            switchMode = 3;
-            toConsoleJoystickModeState(switchMode);
+            rotateModeActive = !rotateModeActive;
+            toConsoleJoystickModeState(rotateModeActive);
         }
 
         int xReading = readAxis(X_AXIS_I, RANGE, CENTER, THRESHOLD);
         int yReading = readAxis(Y_AXIS_I, RANGE, CENTER, THRESHOLD);
-
         if (xReading != 0 || yReading != 0)
         {
-            Serial.print("Joystick data: x=");
-            Serial.print(xReading);
-            Serial.print(", y=");
-            Serial.print(yReading);
+            toConsoleJoystickData(xReading, yReading);
+
+            // if (rotateModeActive)
+            // {
+            //     Keyboard.press(F4_KEY);
+            //     Mouse.press(MOUSE_LEFT);
+            //     Mouse.move(xReading, yReading, 0);
+            // }
+            // else
+            // {
+            //     Mouse.press(MOUSE_MIDDLE_KEY);
+            //     Mouse.move(xReading, yReading, 0);
+            // }
+
+            Serial.print("Joystick time: ");
+            Serial.print(currentMillis);
             Serial.println(".");
 
-            switch (switchMode)
-            {
-            case 1:
-                Keyboard.press(F4_KEY);
-                Mouse.press(MOUSE_LEFT);
-                Mouse.move(xReading, yReading, 0);
+            Keyboard.press(F4_KEY);
+            Mouse.press(MOUSE_LEFT);
+            Mouse.move(xReading, yReading, 0);
 
-                break;
-            case 2:
-                Mouse.press(MOUSE_MIDDLE_KEY);
-                Mouse.move(xReading, yReading, 0);
+            // delay(RESPONSE_DELAY);
 
-                break;
-            case 3:
-                Keyboard.press(F3_KEY);
-                Mouse.press(MOUSE_LEFT);
-                Mouse.move(0, yReading, 0);
-
-                break;
-
-            default:
-                Serial.print("UNEXPECTED MODE: ");
-                Serial.print(switchMode);
-                Serial.print("!!!!!");
-
-                break;
-            }
+            // Keyboard.releaseAll();
+            // Mouse.release(MOUSE_LEFT);
 
             wasMoved = true;
         }
-        else if (wasMoved)
+
+        // int zoomReading = 0;
+        // bool zoomInState = debounce(lastZoomInState, ZOOM_IN_I);
+        // bool zoomOutState = debounce(lastZoomOutState, ZOOM_OUT_I);
+        // if (zoomInState)
+        // {
+        //     zoomReading = STEP_MOVE;
+        // }
+        // else if (zoomOutState)
+        // {
+        //     zoomReading = -STEP_MOVE;
+        // }
+        // if (zoomReading != 0)
+        // {
+        //     toConsoleJoystickData(zoomReading);
+
+        //     Keyboard.press(F3_KEY);
+        //     Mouse.press(MOUSE_LEFT);
+        //     Mouse.move(0, zoomReading, 0);
+
+        //     wasMoved = true;
+        // }
+
+        if (wasMoved)
         {
+            Serial.print("wasMoved time: ");
+            Serial.print(currentMillis);
+            Serial.println(".");
+
             Keyboard.releaseAll();
             Mouse.release(MOUSE_LEFT);
             Mouse.release(MOUSE_MIDDLE_KEY);
@@ -221,33 +253,33 @@ void loop()
             * step range: -128 to 127
             */
             //move mouse left to the end of the screen
-            for (int a = 0; a < LEFT_STEPS_ITERATION_QTY; a++)
-            {
-                Mouse.move(-128, 0, 0);
-            }
+            // for (int a = 0; a < LEFT_STEPS_ITERATION_QTY; a++)
+            // {
+            //     Mouse.move(-128, 0, 0);
+            // }
             //move mouse up to the left upper corner of the screen
-            for (int a = 0; a < UP_STEPS_ITERATION_QTY; a++)
-            {
-                Mouse.move(0, -128, 0);
-            }
+            // for (int a = 0; a < UP_STEPS_ITERATION_QTY; a++)
+            // {
+            //     Mouse.move(0, -128, 0);
+            // }
             //move mouse right to the upper ~center of the screen
-            for (int a = 0; a < RIGHT_STEPS_ITERATION_QTY; a++)
-            {
-                Mouse.move(127, 0, 0);
-            }
+            // for (int a = 0; a < RIGHT_STEPS_ITERATION_QTY; a++)
+            // {
+            //     Mouse.move(127, 0, 0);
+            // }
             //move mouse down to the ~center of the screen
-            for (int a = 0; a < DOWN_STEPS_ITERATION_QTY; a++)
-            {
-                Mouse.move(0, 127, 0);
-            }
+            // for (int a = 0; a < DOWN_STEPS_ITERATION_QTY; a++)
+            // {
+            //     Mouse.move(0, 127, 0);
+            // }
 
             wasMoved = false;
         }
 
         // save current switch mode buttons states to use on the next loop
-        lastInclineSwitchState = switchInclineSwitchState;
-        lastMoveSwitchState = switchMoveSwitchState;
-        lastZoomSwitchState = switchZoomSwitchState;
+        lastJoystickModeSwitchState = switchJoystickModeSwitchState;
+        // lastZoomInState = zoomInState;
+        // lastZoomOutState = zoomOutState;
 
         delay(RESPONSE_DELAY);
     }
