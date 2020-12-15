@@ -45,7 +45,7 @@ bool lastGoHomeState = LOW;             // previous 'go home' state
 bool deviceIsActive = false;            // whether or not to control the HID
 bool wasMoved = false;                  // indicates movement state
 bool rotateModeActive = true;           // joystick mode (true - rotate, false - move)
-bool placeMouseToCenter = true;         // place or not mouse to the center of the screen
+bool placeMouseToCenter = true;        // place or not mouse to the center of the screen
 
 /*
   reads an axis (0 or 1 for x or y) and scales the analog input RANGE to a RANGE from 0 to <RANGE>
@@ -239,6 +239,8 @@ void loop()
         {
             Keyboard.write(F6_KEY);
 
+            wasMoved = true;
+
             delay(RESPONSE_DELAY);
         }
         lastToCenterState = toCenterState;
@@ -246,7 +248,28 @@ void loop()
         bool goHomeState = debounce(lastGoHomeState, HOME_I);
         if (goHomeState != lastGoHomeState && goHomeState == LOW)
         {
-            // Keyboard.write(HOME_KEY);
+            /*
+                * set mouse to the 'go home' icon
+                * step range: -128 to 127
+                */
+            //move mouse right to the end of the screen
+            for (int a = 0; a < 11; a++)
+            {
+                Mouse.move(127, 0, 0);
+            }
+            //move mouse up to the right upper corner of the screen
+            for (int a = 0; a < 7; a++)
+            {
+                Mouse.move(0, -128, 0);
+            }
+            //move mouse left under the 'home' button
+            Mouse.move(-70, 0, 0);
+            //move mouse down to the the 'home' button
+            Mouse.move(0, 127, 0);
+            Mouse.move(0, 40, 0);
+            Mouse.click(MOUSE_LEFT_KEY);
+
+            wasMoved = true;
 
             delay(RESPONSE_DELAY);
         }
