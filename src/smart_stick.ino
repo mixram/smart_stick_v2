@@ -17,7 +17,7 @@
 #define THRESHOLD RANGE / 4            // resting THRESHOLD
 #define CENTER RANGE / 2               // resting position value
 #define RESPONSE_DELAY 5               // response delay of the mouse, in ms
-#define ZOOM_STEP_MOVE 4               // step amount for X or Y movement
+#define ZOOM_STEP_MOVE 2               // step amount for X or Y movement
 #define SENSITIVITY 2                  // higher sensitivity value = slower mouse
 #define MC_LEFT_STEPS_ITERATION_QTY 11 // iterations quantity to reach left end of the screen for mouse centering
 #define MC_UP_STEPS_ITERATION_QTY 7    // iterations quantity to reach left upper corner of the screen for mouse centering
