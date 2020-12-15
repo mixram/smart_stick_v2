@@ -8,21 +8,21 @@
 #define ZOOM_IN_I 4              // button to zoom in
 #define ZOOM_OUT_I 5             // button to zoom out
 #define CENTER_I 6               // button for 'center' function
-#define HOME_I 7                 // button to 'go home'
+#define HOME_I 7                 // button for 'go home'
 #define X_AXIS_I A0              // joystick X axis
 #define Y_AXIS_I A1              // joystick Y axis
 
 /*PARAMS*/
-#define RANGE 8                     // output RANGE of X or Y
-#define THRESHOLD RANGE / 4         // resting THRESHOLD
-#define CENTER RANGE / 2            // resting position value
-#define RESPONSE_DELAY 5            // response delay of the mouse, in ms
-#define STEP_MOVE 4                 // step amount for X or Y movement
-#define SENSITIVITY 2               // higher sensitivity value = slower mouse
-#define LEFT_STEPS_ITERATION_QTY 11 // iterations quantity to reach left end of the screen
-#define UP_STEPS_ITERATION_QTY 7    // iterations quantity to reach left upper corner of the screen
-#define RIGHT_STEPS_ITERATION_QTY 5 // iterations quantity to reach upper ~center of the screen
-#define DOWN_STEPS_ITERATION_QTY 3  // iterations quantity to reach ~center of the screen
+#define RANGE 8                        // output RANGE of X or Y
+#define THRESHOLD RANGE / 4            // resting THRESHOLD
+#define CENTER RANGE / 2               // resting position value
+#define RESPONSE_DELAY 5               // response delay of the mouse, in ms
+#define ZOOM_STEP_MOVE 4               // step amount for X or Y movement
+#define SENSITIVITY 2                  // higher sensitivity value = slower mouse
+#define MC_LEFT_STEPS_ITERATION_QTY 11 // iterations quantity to reach left end of the screen for mouse centering
+#define MC_UP_STEPS_ITERATION_QTY 7    // iterations quantity to reach left upper corner of the screen for mouse centering
+#define MC_RIGHT_STEPS_ITERATION_QTY 5 // iterations quantity to reach upper ~center of the screen for mouse centering
+#define MC_DOWN_STEPS_ITERATION_QTY 3  // iterations quantity to reach ~center of the screen for mouse centering
 
 /*MOUSE*/
 #define MOUSE_LEFT_KEY MOUSE_LEFT     // MOUSE_LEFT key
@@ -35,7 +35,6 @@
 #define F3_KEY KEY_F3                 // zoom view
 #define F4_KEY KEY_F4                 // rotate view
 #define F6_KEY KEY_F6                 // home view
-#define HOME_KEY KEY_HOME             // fit zoom
 
 bool lastSwitchOnOffState = LOW;        // previous ON\OFF switch state
 bool lastJoystickModeSwitchState = LOW; // previous joystick mode switch state
@@ -44,9 +43,9 @@ bool lastZoomOutState = LOW;            // previous zoom out state
 bool lastToCenterState = LOW;           // previous 'to center' state
 bool lastGoHomeState = LOW;             // previous 'go home' state
 bool deviceIsActive = false;            // whether or not to control the HID
-bool wasMoved = false;                  //indicates movement state
+bool wasMoved = false;                  // indicates movement state
 bool rotateModeActive = true;           // joystick mode (true - rotate, false - move)
-bool placeMouseToCenter = true;         //place or not mouse to the center of the screen
+bool placeMouseToCenter = true;         // place or not mouse to the center of the screen
 
 /*
   reads an axis (0 or 1 for x or y) and scales the analog input RANGE to a RANGE from 0 to <RANGE>
@@ -167,6 +166,8 @@ void loop()
         deviceIsActive = !deviceIsActive;
         // toConsoleDeviceState(deviceIsActive);
     }
+    // save current ON\OFF button state to use on the next loop
+    lastSwitchOnOffState = switchOnOffState;
 
     // if the HID control state is active, do actions
     if (deviceIsActive)
@@ -179,24 +180,9 @@ void loop()
             rotateModeActive = !rotateModeActive;
             // toConsoleJoystickModeState(rotateModeActive);
         }
-
+        lastJoystickModeSwitchState = switchJoystickModeSwitchState;
         int xReading = readAxis(X_AXIS_I, RANGE, CENTER, THRESHOLD);
         int yReading = readAxis(Y_AXIS_I, RANGE, CENTER, THRESHOLD);
-        bool zoomInState = debounce(lastZoomInState, ZOOM_IN_I);
-        bool zoomOutState = debounce(lastZoomOutState, ZOOM_OUT_I);
-        bool toCenterState = debounce(lastToCenterState, CENTER_I);
-        bool goHomeState = debounce(lastGoHomeState, HOME_I);
-
-        int zoomReading = 0;
-        if (zoomInState)
-        {
-            zoomReading = STEP_MOVE;
-        }
-        else if (zoomOutState)
-        {
-            zoomReading = -STEP_MOVE;
-        }
-
         if (xReading != 0 || yReading != 0)
         {
             // toConsoleJoystickData(xReading, yReading);
@@ -214,8 +200,26 @@ void loop()
             }
 
             wasMoved = true;
+
+            delay(RESPONSE_DELAY);
+
+            return;
         }
-        else if (zoomReading != 0)
+
+        bool zoomInState = debounce(lastZoomInState, ZOOM_IN_I);
+        bool zoomOutState = debounce(lastZoomOutState, ZOOM_OUT_I);
+        lastZoomInState = zoomInState;
+        lastZoomOutState = zoomOutState;
+        int zoomReading = 0;
+        if (zoomInState)
+        {
+            zoomReading = ZOOM_STEP_MOVE;
+        }
+        else if (zoomOutState)
+        {
+            zoomReading = -ZOOM_STEP_MOVE;
+        }
+        if (zoomReading != 0)
         {
             // toConsoleJoystickData(zoomReading);
 
@@ -224,16 +228,31 @@ void loop()
             Mouse.move(0, zoomReading, 0);
 
             wasMoved = true;
+
+            delay(RESPONSE_DELAY);
+
+            return;
         }
-        else if (toCenterState != lastToCenterState && toCenterState == LOW)
+
+        bool toCenterState = debounce(lastToCenterState, CENTER_I);
+        if (toCenterState != lastToCenterState && toCenterState == LOW)
         {
             Keyboard.write(F6_KEY);
+
+            delay(RESPONSE_DELAY);
         }
-        else if (goHomeState != lastGoHomeState && goHomeState == LOW)
+        lastToCenterState = toCenterState;
+
+        bool goHomeState = debounce(lastGoHomeState, HOME_I);
+        if (goHomeState != lastGoHomeState && goHomeState == LOW)
         {
-            Keyboard.write(HOME_KEY);
+            // Keyboard.write(HOME_KEY);
+
+            delay(RESPONSE_DELAY);
         }
-        else if (wasMoved)
+        lastGoHomeState = goHomeState;
+
+        if (wasMoved)
         {
             Keyboard.releaseAll();
             Mouse.release(MOUSE_LEFT);
@@ -247,40 +266,30 @@ void loop()
                 * step range: -128 to 127
                 */
                 //move mouse left to the end of the screen
-                for (int a = 0; a < LEFT_STEPS_ITERATION_QTY; a++)
+                for (int a = 0; a < MC_LEFT_STEPS_ITERATION_QTY; a++)
                 {
                     Mouse.move(-128, 0, 0);
                 }
                 //move mouse up to the left upper corner of the screen
-                for (int a = 0; a < UP_STEPS_ITERATION_QTY; a++)
+                for (int a = 0; a < MC_UP_STEPS_ITERATION_QTY; a++)
                 {
                     Mouse.move(0, -128, 0);
                 }
                 //move mouse right to the upper ~center of the screen
-                for (int a = 0; a < RIGHT_STEPS_ITERATION_QTY; a++)
+                for (int a = 0; a < MC_RIGHT_STEPS_ITERATION_QTY; a++)
                 {
                     Mouse.move(127, 0, 0);
                 }
                 //move mouse down to the ~center of the screen
-                for (int a = 0; a < DOWN_STEPS_ITERATION_QTY; a++)
+                for (int a = 0; a < MC_DOWN_STEPS_ITERATION_QTY; a++)
                 {
                     Mouse.move(0, 127, 0);
                 }
             }
 
             wasMoved = false;
+
+            delay(RESPONSE_DELAY);
         }
-
-        // save current switch mode buttons states to use on the next loop
-        lastJoystickModeSwitchState = switchJoystickModeSwitchState;
-        lastZoomInState = zoomInState;
-        lastZoomOutState = zoomOutState;
-        lastToCenterState = toCenterState;
-        lastGoHomeState = goHomeState;
-
-        delay(RESPONSE_DELAY);
     }
-
-    // save current ON\OFF button state to use on the next loop
-    lastSwitchOnOffState = switchOnOffState;
 }
